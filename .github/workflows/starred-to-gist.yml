@@ -1,0 +1,37 @@
+name: Export Starred Repos to Gist
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export-to-gist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch starred repositories
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          curl -s -H "Authorization: token $GH_TOKEN" \
+               "https://api.github.com/user/starred?per_page=200" > starred.json
+
+      - name: Generate markdown from JSON
+        run: |
+          echo "# 🌟 Starred GitHub Repositories" > starred.md
+          echo "" >> starred.md
+          jq -r '.[] | "- **[\(.full_name)](\(.html_url))**: \(.description // "No description")"' starred.json >> starred.md
+
+      - name: Create public gist
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          GIST_DATA=$(jq -Rs '{description: "Starred GitHub Repos", public: true, files: {"starred_repos.md": {content: .}}}' starred.md)
+          curl -s -X POST -H "Authorization: token $GH_TOKEN" \
+               -H "Content-Type: application/json" \
+               -d "$GIST_DATA" https://api.github.com/gists \
+               | jq -r '.html_url' > gist_url.txt
+
+      - name: Print Gist URL
+        run: |
+          echo "🔗 Your Gist URL:"
+          cat gist_url.txt
